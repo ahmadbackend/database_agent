@@ -43,11 +43,7 @@ pharmacy/                 # main app
 ## Setup
 
 ```bash
-<<<<<<< HEAD
-git clone https://github.com/ahmadbackend/database_agent
-=======
 git clone https://github.com/ahmadbackend/database_agent.git
->>>>>>> 0ec8ef252087c63c1cd533d370cd2270716a8a20
 cd invoices
 python -m venv venv
 venv\Scripts\activate          # Linux/macOS: source venv/bin/activate
