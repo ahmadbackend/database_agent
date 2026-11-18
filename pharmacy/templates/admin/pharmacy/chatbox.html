@@ -1,0 +1,198 @@
+<style>
+  .da-launcher {
+    position: fixed; bottom: 24px; right: 24px; z-index: 10000;
+    background: var(--primary, #417690); color: #fff;
+    border: 0; border-radius: 24px; padding: 12px 20px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, .3);
+  }
+  .da-launcher:hover { filter: brightness(1.1); }
+  .da-panel {
+    display: flex; flex-direction: column; overflow: hidden;
+    background: var(--body-bg, #fff); color: var(--body-fg, #333);
+    border: 1px solid var(--border-color, #ddd); border-radius: 10px;
+  }
+  .da-panel.floating {
+    position: fixed; bottom: 84px; right: 24px; z-index: 10000;
+    width: 440px; max-width: 92vw; height: 540px; max-height: 72vh;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .3);
+  }
+  .da-panel.inline { width: 100%; max-width: 820px; height: 600px; margin-top: 16px; }
+  .da-header {
+    background: var(--primary, #417690); color: #fff;
+    padding: 10px 14px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .da-header strong { font-size: 14px; }
+  .da-header small { display: block; font-weight: 400; opacity: .85; }
+  .da-close { background: none; border: 0; color: #fff; font-size: 22px; cursor: pointer; line-height: 1; }
+  .da-messages { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .da-msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; font-size: 13px; word-break: break-word; }
+  .da-user { align-self: flex-end; background: var(--primary, #417690); color: #fff; border-bottom-right-radius: 2px; white-space: pre-wrap; }
+  .da-bot { align-self: flex-start; background: var(--darkened-bg, #f0f0f0); color: var(--body-fg, #333); border-bottom-left-radius: 2px; }
+  .da-bot.da-error { background: var(--error-bg, #fdd); color: var(--error-fg, #a00); }
+  .da-thinking { opacity: .6; font-style: italic; }
+  .da-table { border-collapse: collapse; font-size: 12px; margin-top: 8px; width: 100%; }
+  .da-table th, .da-table td { border: 1px solid var(--border-color, #ccc); padding: 3px 8px; text-align: left; }
+  .da-table th { background: var(--darkened-bg, #e8e8e8); }
+  .da-more { font-size: 11px; opacity: .75; margin-top: 4px; }
+  .da-sql { margin-top: 8px; font-size: 11px; }
+  .da-sql pre { background: var(--body-bg, #fff); border: 1px solid var(--border-color, #ddd); padding: 6px; overflow-x: auto; white-space: pre-wrap; }
+  .da-form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--border-color, #ddd); }
+  .da-form input { flex: 1; padding: 8px; border: 1px solid var(--border-color, #ccc); border-radius: 6px; background: var(--body-bg, #fff); color: var(--body-fg, #333); }
+  .da-form button { padding: 8px 16px; border: 0; border-radius: 6px; background: var(--primary, #417690); color: #fff; cursor: pointer; }
+  .da-form button:disabled, .da-form input:disabled { opacity: .5; cursor: wait; }
+</style>
+
+{% if floating %}
+<button type="button" class="da-launcher" id="da-launcher">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+  Data assistant
+</button>
+{% endif %}
+
+<div class="da-panel {{ panel_class }}" id="da-panel" {% if floating %}hidden{% endif %}>
+  <div class="da-header">
+    <div><strong>Data assistant</strong><small>Read-only &middot; sales, stock, branches</small></div>
+    {% if floating %}<button type="button" class="da-close" id="da-close">&times;</button>{% endif %}
+  </div>
+  <div class="da-messages" id="da-messages"></div>
+  <form class="da-form" id="da-form">
+    {% csrf_token %}
+    <input type="text" id="da-input" minlength="5" maxlength="500" autocomplete="off"
+           placeholder="e.g. Who is the best seller this month?">
+    <button type="submit" id="da-send">Send</button>
+  </form>
+</div>
+
+<script>
+(function () {
+  const ENDPOINT = "{% url 'admin:pharmacy_assistant' %}";
+  const panel = document.getElementById('da-panel');
+  const launcher = document.getElementById('da-launcher');
+  const closeBtn = document.getElementById('da-close');
+  const messages = document.getElementById('da-messages');
+  const form = document.getElementById('da-form');
+  const input = document.getElementById('da-input');
+  const sendBtn = document.getElementById('da-send');
+  const csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+
+  if (launcher) launcher.addEventListener('click', function () { panel.hidden = false; input.focus(); });
+  if (closeBtn) closeBtn.addEventListener('click', function () { panel.hidden = true; });
+
+  function scrollDown() { messages.scrollTop = messages.scrollHeight; }
+
+  function addBubble(cls) {
+    const div = document.createElement('div');
+    div.className = 'da-msg ' + cls;
+    messages.appendChild(div);
+    scrollDown();
+    return div;
+  }
+
+  function renderAnswer(data) {
+    const bubble = addBubble('da-bot');
+    if (data.summary) {
+      const p = document.createElement('div');
+      p.textContent = data.summary;
+      bubble.appendChild(p);
+    }
+    if (data.rows && data.rows.length) {
+      const table = document.createElement('table');
+      table.className = 'da-table';
+      const head = document.createElement('tr');
+      data.columns.forEach(function (c) {
+        const th = document.createElement('th');
+        th.textContent = c;
+        head.appendChild(th);
+      });
+      table.appendChild(head);
+      data.rows.slice(0, 10).forEach(function (row) {
+        const tr = document.createElement('tr');
+        row.forEach(function (cell) {
+          const td = document.createElement('td');
+          td.textContent = cell;
+          tr.appendChild(td);
+        });
+        table.appendChild(tr);
+      });
+      bubble.appendChild(table);
+      if (data.rows.length > 10 || data.truncated) {
+        const more = document.createElement('div');
+        more.className = 'da-more';
+        more.textContent = 'Showing 10 of ' + (data.truncated ? '500+' : data.rows.length) + ' rows';
+        bubble.appendChild(more);
+      }
+    } else if (!data.summary) {
+      bubble.textContent = 'No matching data found.';
+    }
+    if (data.sql) {
+      const details = document.createElement('details');
+      details.className = 'da-sql';
+      const summaryEl = document.createElement('summary');
+      summaryEl.textContent = 'SQL';
+      const pre = document.createElement('pre');
+      pre.textContent = data.sql;
+      details.appendChild(summaryEl);
+      details.appendChild(pre);
+      bubble.appendChild(details);
+    }
+    scrollDown();
+  }
+
+  function greet() {
+    const bubble = addBubble('da-bot');
+    bubble.textContent = 'Hi! Ask me about sales, sellers, branches or stock — for example "top 5 products this year" or "which branch earned the most today?".';
+  }
+  greet();
+
+  form.addEventListener('submit', function (event) {
+    event.preventDefault();
+    const question = input.value.trim();
+    if (!question) return;
+    if (question.length < 5) {
+      const err = addBubble('da-bot da-error');
+      err.textContent = 'Question is too short — ask a full question (at least 5 characters).';
+      return;
+    }
+
+    const userBubble = addBubble('da-user');
+    userBubble.textContent = question;
+    input.value = '';
+    input.disabled = true;
+    sendBtn.disabled = true;
+    const thinking = addBubble('da-bot da-thinking');
+    thinking.textContent = 'Thinking ...';
+
+    const body = new URLSearchParams();
+    body.append('question', question);
+    if (csrf) body.append('csrfmiddlewaretoken', csrf.value);
+
+    fetch(ENDPOINT, {
+      method: 'POST',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: body,
+    })
+      .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
+      .then(function (result) {
+        thinking.remove();
+        if (result.ok) {
+          renderAnswer(result.data);
+        } else {
+          const err = addBubble('da-bot da-error');
+          err.textContent = result.data.error || 'Something went wrong.';
+        }
+      })
+      .catch(function () {
+        thinking.remove();
+        const err = addBubble('da-bot da-error');
+        err.textContent = 'Network error — is the server running?';
+      })
+      .finally(function () {
+        input.disabled = false;
+        sendBtn.disabled = false;
+        input.focus();
+      });
+  });
+})();
+</script>

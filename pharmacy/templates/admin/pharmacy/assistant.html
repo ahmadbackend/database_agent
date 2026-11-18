@@ -1,0 +1,8 @@
+{% extends "admin/base_site.html" %}
+{% block title %}Data assistant{% endblock %}
+
+{% block content %}
+<h1>Data assistant</h1>
+<p>Ask about sales, branches, sellers or products. Read-only: every answer comes from a single SELECT on the reporting views.</p>
+{% include "admin/pharmacy/chatbox.html" with floating=False panel_class="inline" %}
+{% endblock %}

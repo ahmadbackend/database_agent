@@ -1,0 +1,6 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+{{ block.super }}
+{% include "admin/pharmacy/chatbox.html" with floating=True panel_class="floating" %}
+{% endblock %}
