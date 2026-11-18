@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.http import JsonResponse
-from django.template.response import TemplateResponse
+from django.shortcuts import redirect
 from django.urls import path
 
 from pharmacy.assistant.service import answer_question
@@ -77,11 +77,7 @@ def assistant_view(request):
             'rows': [[str(cell) for cell in row] for row in result['rows']],
             'truncated': result['truncated'],
         })
-    context = {
-        **admin.site.each_context(request),
-        'title': 'Data assistant',
-    }
-    return TemplateResponse(request, 'admin/pharmacy/assistant.html', context)
+    return redirect('admin:index')
 
 
 _default_get_urls = admin.site.get_urls

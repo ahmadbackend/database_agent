@@ -43,7 +43,7 @@ pharmacy/                 # main app
 ## Setup
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/ahmadbackend/database_agent
 cd invoices
 python -m venv venv
 venv\Scripts\activate          # Linux/macOS: source venv/bin/activate
@@ -76,8 +76,7 @@ Settings in `invoices/settings.py`:
 
 - **Data entry**: standard Django admin (invoices with inline line items).
 - **AI assistant**: open `/admin/` — a chat widget sits in the bottom-right
-  corner of the admin home page (also available as a full page at
-  `/admin/pharmacy/assistant/`). Ask, e.g.
+  corner of the admin home page. Ask, e.g.
   - "Who is the best seller this month?"
   - "Which branch made the most revenue today?"
   - "Top 5 best selling products this year?"
