@@ -1,5 +1,8 @@
+import hashlib
 import logging
 
+from django.conf import settings
+from django.core.cache import cache
 from django.db import Error as DatabaseError
 from django.db import connections
 
@@ -14,6 +17,31 @@ logger = logging.getLogger(__name__)
 MIN_QUESTION_LEN = 5
 MAX_QUESTION_LEN = 500
 MAX_ATTEMPTS = 3
+
+DATA_VERSION_KEY = 'assistant:data_version'
+
+
+def _data_version():
+    version = cache.get(DATA_VERSION_KEY)
+    if version is None:
+        cache.add(DATA_VERSION_KEY, 1, timeout=None)
+        version = 1
+    return version
+
+
+def invalidate_assistant_cache():
+    """Bump the data version so every cached answer key becomes stale."""
+    if not cache.add(DATA_VERSION_KEY, 2, timeout=None):
+        try:
+            cache.incr(DATA_VERSION_KEY)
+        except ValueError:
+            cache.set(DATA_VERSION_KEY, 2, timeout=None)
+
+
+def _question_cache_key(question):
+    normalized = ' '.join(question.lower().split())
+    digest = hashlib.sha256(normalized.encode('utf-8')).hexdigest()
+    return f'assistant:answer:v{_data_version()}:{digest}'
 
 
 def _run_query(sql):
@@ -40,6 +68,13 @@ def answer_question(question):
         raise ValueError(
             f'Question is too long (max {MAX_QUESTION_LEN} characters).'
         )
+
+    ttl = getattr(settings, 'ASSISTANT_CACHE_TTL', 7200)
+    cache_key = _question_cache_key(question) if ttl > 0 else None
+    if cache_key:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
 
     prompt = build_sql_prompt(question)
     last_error = None
@@ -69,10 +104,13 @@ def answer_question(question):
     except ollama_client.OllamaError:
         logger.warning('Summary generation failed', exc_info=True)
 
-    return {
+    result = {
         'sql': sql,
         'columns': columns,
         'rows': rows,
         'truncated': truncated,
         'summary': summary,
     }
+    if cache_key:
+        cache.set(cache_key, result, ttl)
+    return result

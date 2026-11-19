@@ -10,22 +10,45 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
+import socket
 from pathlib import Path
+from urllib.parse import urlparse
+
+from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Load local overrides from .env (see example.env). .env is git-ignored.
+load_dotenv(BASE_DIR / '.env')
+
+
+def env_bool(key, default=False):
+    return os.environ.get(key, str(default)).lower() in ('1', 'true', 'yes', 'on')
+
+
+def env_int(key, default):
+    try:
+        return int(os.environ.get(key, ''))
+    except ValueError:
+        return default
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-#h*57q+3&qedc*a=mp*^ow1&nsl5r=+l+=#t4&hwmxjiq&yj(('
+# Set SECRET_KEY in .env; this fallback is for local development only.
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-dev-key-change-me')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    host.strip()
+    for host in os.environ.get('ALLOWED_HOSTS', '').split(',')
+    if host.strip()
+]
 
 
 # Application definition
@@ -87,12 +110,6 @@ DATABASES = {
     },
 }
 
-# Local Ollama server used by the admin data assistant
-OLLAMA_URL = 'http://localhost:11434'
-OLLAMA_MODEL = 'qwen2.5-coder:7b'
-# GPU inference on this machine produces corrupted tokens; 0 = CPU only.
-OLLAMA_NUM_GPU = 0
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -134,3 +151,46 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Local Ollama server used by the admin data assistant
+OLLAMA_URL = os.environ.get('OLLAMA_URL', 'http://localhost:11434')
+OLLAMA_MODEL = os.environ.get('OLLAMA_MODEL', 'qwen2.5-coder:7b')
+# GPU inference on this machine produces corrupted tokens; 0 = CPU only.
+OLLAMA_NUM_GPU = env_int('OLLAMA_NUM_GPU', 0)
+
+# Assistant answer cache lifetime in seconds (default 2 hours). 0 disables caching.
+ASSISTANT_CACHE_TTL = env_int('ASSISTANT_CACHE_TTL', 7200)
+
+
+def _redis_reachable(url):
+    try:
+        import redis  # noqa: F401
+    except ImportError:
+        return False
+    parts = urlparse(url)
+    try:
+        with socket.create_connection(
+            (parts.hostname or '127.0.0.1', parts.port or 6379), timeout=0.5,
+        ):
+            return True
+    except OSError:
+        return False
+
+
+# Answer cache: Redis when reachable, per-process in-memory otherwise.
+REDIS_URL = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379/1')
+if _redis_reachable(REDIS_URL):
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL,
+        }
+    }
+else:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'assistant-answers',
+        }
+    }
