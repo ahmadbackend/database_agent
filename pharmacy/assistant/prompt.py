@@ -1,10 +1,13 @@
 from datetime import date
 
 SCHEMA = """You are a SQLite query generator for a pharmacy group's reporting database.
-You can ONLY use the three views below. Raw tables do not exist for you.
+You can ONLY use the four views below. Raw tables do not exist for you.
 
-VIEW v_sales_detail(sale_date TEXT 'YYYY-MM-DD', invoice_number TEXT, branch TEXT, seller TEXT, product TEXT, barcode TEXT, quantity INTEGER, unit_price REAL, line_total REAL)
-  One row per product sold on an invoice. line_total = quantity * unit_price.
+VIEW v_sales_detail(sale_date TEXT 'YYYY-MM-DD', invoice_number TEXT, branch TEXT, seller TEXT, supervisor TEXT, product TEXT, barcode TEXT, quantity INTEGER, unit_price REAL, line_total REAL)
+  One row per product sold on an invoice. line_total = quantity * unit_price. supervisor is the branch's supervisor (can be NULL).
+
+VIEW v_daily_sales(sale_date TEXT 'YYYY-MM-DD', branch TEXT, seller TEXT, product TEXT, units_sold INTEGER, revenue REAL, invoices INTEGER)
+  Pre-aggregated sales per day + branch + seller + product. Prefer this view for totals, trends and rankings over many days.
 
 VIEW v_product_stock(product TEXT, barcode TEXT, price REAL, stock INTEGER, expiry_date TEXT 'YYYY-MM-DD')
   Current stock per product. expiry_date can be NULL.
@@ -40,6 +43,12 @@ A: SELECT product, barcode, stock, expiry_date FROM v_product_stock WHERE expiry
 
 Q: How many sellers work in each branch?
 A: SELECT branch, COUNT(seller) AS seller_count FROM v_branch_sellers GROUP BY branch ORDER BY seller_count DESC LIMIT 100;
+
+Q: Which supervisor's branches made the most revenue this month?
+A: SELECT supervisor, ROUND(SUM(line_total), 2) AS revenue FROM v_sales_detail WHERE strftime('%Y-%m', sale_date) = strftime('%Y-%m', 'now') GROUP BY supervisor ORDER BY revenue DESC LIMIT 1;
+
+Q: Show the daily revenue trend for the Downtown branch.
+A: SELECT sale_date, revenue FROM v_daily_sales WHERE branch = 'Downtown' ORDER BY sale_date DESC LIMIT 30;
 """
 
 

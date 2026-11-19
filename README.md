@@ -38,7 +38,7 @@ pharmacy/                 # main app
 ├── apps.py               # wires cache-invalidation signals on model saves/deletes
 ├── data/dummy_data.csv   # seed data (one row per sold product line)
 ├── management/commands/load_dummy_data.py
-├── migrations/0002_reporting_views.py   # creates the 3 reporting views
+├── migrations/            # 0002 + 0003 create and update the 4 reporting views
 └── assistant/            # the AI assistant
     ├── prompt.py         # view schemas + few-shot examples sent to the LLM
     ├── ollama_client.py  # HTTP client for the local Ollama server
@@ -104,8 +104,9 @@ ollama pull qwen2.5-coder:7b
 The LLM never touches the database directly; it only outputs SQL text, which
 must pass three independent layers:
 
-1. **Prompt** — the model only knows about 3 reporting views
-   (`v_sales_detail`, `v_product_stock`, `v_branch_sellers`), never raw tables.
+1. **Prompt** — the model only knows about the reporting views
+   (`v_sales_detail`, `v_daily_sales`, `v_product_stock`, `v_branch_sellers`),
+   never raw tables.
 2. **Validation gate** (`assistant/validate.py`) — rejects anything that is not
    exactly one `SELECT`; blocks write/introspection keywords (`INSERT`, `DROP`,
    `PRAGMA`, `ATTACH`, `sqlite_*`, …); every referenced table must be in the

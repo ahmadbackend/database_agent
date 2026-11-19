@@ -6,6 +6,7 @@ ALLOWED_TABLES = frozenset({
     'v_sales_detail',
     'v_product_stock',
     'v_branch_sellers',
+    'v_daily_sales',
 })
 MAX_ROWS = 500
 
